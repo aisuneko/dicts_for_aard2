@@ -51,34 +51,24 @@ jobs:
           pip install https://github.com/itkach/mwscrape/tarball/master
           pip install git+https://github.com/itkach/mw2slob.git
 
-      - name: Install CouchDB
-        run: |
-          curl https://couchdb.apache.org/repo/keys.asc | gpg --dearmor | sudo tee /usr/share/keyrings/couchdb-archive-keyring.gpg >/dev/null 2>&1
-          source /etc/os-release
-          echo "deb [signed-by=/usr/share/keyrings/couchdb-archive-keyring.gpg] https://apache.jfrog.io/artifactory/couchdb-deb/ ${VERSION_CODENAME} main" | sudo tee /etc/apt/sources.list.d/couchdb.list >/dev/null
-          sudo apt-get update
-          echo "couchdb couchdb/mode select standalone
-          couchdb couchdb/bindaddress string 127.0.0.1
-          couchdb couchdb/admin_username string ${{ env.COUCHDB_USER }}
-          couchdb couchdb/admin_password password ${{ env.COUCHDB_PASSWORD }}" | sudo debconf-set-selections
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y couchdb
-
       - name: Restore CouchDB data cache
         uses: actions/cache@v4
         id: cache-couchdb
         with:
-          path: /opt/couchdb/data
+          path: ~/couchdb-data
           key: couchdb-${{ matrix.site }}-${{ github.run_id }}
           restore-keys: |
             couchdb-${{ matrix.site }}-
 
-      - name: Fix CouchDB data ownership
-        run: |
-          sudo chown -R couchdb:couchdb /opt/couchdb/data
-          sudo chmod -R 770 /opt/couchdb/data
-
       - name: Start CouchDB
-        run: sudo COUCHDB_USER=${{ env.COUCHDB_USER }} COUCHDB_PASSWORD=${{ env.COUCHDB_PASSWORD }} /opt/couchdb/bin/couchdb &
+        run: |
+          mkdir -p ~/couchdb-data
+          docker run -d --name couchdb \
+            -e COUCHDB_USER=${{ env.COUCHDB_USER }} \
+            -e COUCHDB_PASSWORD=${{ env.COUCHDB_PASSWORD }} \
+            -v ~/couchdb-data:/opt/couchdb/data \
+            -p 5984:5984 \
+            couchdb:3
 
       - name: Wait for CouchDB
         run: |
@@ -90,6 +80,7 @@ jobs:
             sleep 2
           done
           echo "CouchDB failed to start"
+          docker logs couchdb
           exit 1
 
       - name: Scrape site
@@ -109,10 +100,6 @@ jobs:
           source env-slob/bin/activate
           SITE_NAME=$(sed 's/\./-/g' <<< "${{ matrix.site }}")
           mw2slob scrape http://${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@127.0.0.1:5984/$SITE_NAME --ensure-ext-image-urls
-
-      - name: Prepare CouchDB data for cache
-        if: always()
-        run: sudo chown -R $USER /opt/couchdb/data
 
       - name: Upload slob artifact
         uses: actions/upload-artifact@v4
