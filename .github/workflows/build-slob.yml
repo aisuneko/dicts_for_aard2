@@ -87,13 +87,11 @@ jobs:
           docker logs couchdb
           exit 1
 
-      - name: Verify CouchDB connection
+      - name: Verify CouchDB is healthy
         run: |
-          if ! curl -sf http://${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984/_up | grep -q '"ok":true'; then
-            echo "CouchDB not healthy"
-            docker logs couchdb
-            exit 1
-          fi
+          STATUS=$(curl -sf http://${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984/_up)
+          echo "$STATUS"
+          echo "$STATUS" | grep -q '"status":"ok"' || { echo "CouchDB not healthy"; docker logs couchdb; exit 1; }
           echo "CouchDB is healthy"
 
       - name: Scrape site
