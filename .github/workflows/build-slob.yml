@@ -72,7 +72,7 @@ jobs:
 
       - name: Wait for CouchDB
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if curl -sf http://${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984/_up | grep -q '"ok":true'; then
               echo "CouchDB is up"
               exit 0
@@ -82,6 +82,16 @@ jobs:
           echo "CouchDB failed to start"
           docker logs couchdb
           exit 1
+
+      - name: Initialize CouchDB system databases
+        run: |
+          AUTH="${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984"
+          for db in _users _replicator _global_changes; do
+            curl -sf -X PUT "http://${AUTH}/${db}" || true
+          done
+          for db in _users _replicator _global_changes; do
+            curl -sf "http://${AUTH}/${db}" | grep -q '"ok":true' || echo "Warning: ${db} may not exist yet"
+          done
 
       - name: Scrape site
         run: |
