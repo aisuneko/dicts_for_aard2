@@ -52,14 +52,16 @@ jobs:
           pip install git+https://github.com/itkach/mw2slob.git
 
       - name: Install CouchDB
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
           curl https://couchdb.apache.org/repo/keys.asc | gpg --dearmor | sudo tee /usr/share/keyrings/couchdb-archive-keyring.gpg >/dev/null 2>&1
           source /etc/os-release
           echo "deb [signed-by=/usr/share/keyrings/couchdb-archive-keyring.gpg] https://apache.jfrog.io/artifactory/couchdb-deb/ ${VERSION_CODENAME} main" | sudo tee /etc/apt/sources.list.d/couchdb.list >/dev/null
           sudo apt-get update
-          sudo apt-get install -y couchdb
+          echo "couchdb couchdb/mode select standalone
+          couchdb couchdb/bindaddress string 127.0.0.1
+          couchdb couchdb/admin_username string ${{ env.COUCHDB_USER }}
+          couchdb couchdb/admin_password password ${{ env.COUCHDB_PASSWORD }}" | sudo debconf-set-selections
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y couchdb
 
       - name: Restore CouchDB data cache
         uses: actions/cache@v4
