@@ -70,28 +70,31 @@ jobs:
             -p 5984:5984 \
             couchdb:3
 
-      - name: Wait for CouchDB
+      - name: Initialize CouchDB system databases
         run: |
           for i in $(seq 1 60); do
-            if curl -sf http://${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984/_up | grep -q '"ok":true'; then
-              echo "CouchDB is up"
+            if curl -sf http://localhost:5984/ >/dev/null 2>&1; then
+              echo "CouchDB port is responding"     
+              AUTH="${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984"
+              for db in _users _replicator _global_changes; do
+                curl -sf -X PUT "http://${AUTH}/${db}" || true
+              done
               exit 0
             fi
             sleep 2
           done
-          echo "CouchDB failed to start"
+          echo "CouchDB port never became available"
           docker logs couchdb
           exit 1
 
-      - name: Initialize CouchDB system databases
+      - name: Verify CouchDB connection
         run: |
-          AUTH="${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984"
-          for db in _users _replicator _global_changes; do
-            curl -sf -X PUT "http://${AUTH}/${db}" || true
-          done
-          for db in _users _replicator _global_changes; do
-            curl -sf "http://${AUTH}/${db}" | grep -q '"ok":true' || echo "Warning: ${db} may not exist yet"
-          done
+          if ! curl -sf http://${{ env.COUCHDB_USER }}:${{ env.COUCHDB_PASSWORD }}@localhost:5984/_up | grep -q '"ok":true'; then
+            echo "CouchDB not healthy"
+            docker logs couchdb
+            exit 1
+          fi
+          echo "CouchDB is healthy"
 
       - name: Scrape site
         run: |
